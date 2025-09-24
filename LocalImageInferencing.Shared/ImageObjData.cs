@@ -19,8 +19,12 @@ namespace LocalImageInferencing.Shared
 		public string MimeType { get; set; } = "image/png";
 		public string Base64Data { get; set; } = string.Empty;
 
+		public float FrameBase64SizeMb { get; set; } = 0.0f;
+		public float ScalingFactor { get; set; } = 1.0f;
 
-		
+
+		private const float maxJsonBase64SizeMb = 134.217728f;
+
 
 
 		public ImageObjData()
@@ -39,6 +43,14 @@ namespace LocalImageInferencing.Shared
 			if (frameId < 0 || frameId >= obj.FramesCount)
 			{
 				frameId = 0;
+			}
+
+			if (obj.FrameBase64SizesMb[frameId] > maxJsonBase64SizeMb)
+			{
+				float factor = maxJsonBase64SizeMb / obj.FrameBase64SizesMb[frameId];
+				obj.Downscale(factor).GetAwaiter().GetResult();
+
+				this.ScalingFactor = factor;
 			}
 
 			this.Id = obj.Id;

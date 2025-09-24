@@ -44,7 +44,8 @@ namespace LocalImageInferencing.Shared
 				this.AvailableModels = models?.Select(m => m.Name).ToList() ?? [];
 				if (models != null && models.Any())
 				{
-					var defaultModel = models.First();
+					string selectedModelName = ollamaApiClient.SelectedModel;
+					var defaultModel = models.FirstOrDefault(m => m.Name.Equals(selectedModelName, StringComparison.OrdinalIgnoreCase)) ?? models.First();
 					this.ModelName = defaultModel.Name;
 					this.ModelDetails = defaultModel.Details.ToString();
 					this.ModelSizeBytes = defaultModel.Size.ToString();

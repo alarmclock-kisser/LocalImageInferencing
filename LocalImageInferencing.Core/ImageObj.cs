@@ -23,6 +23,10 @@ namespace LocalImageInferencing.Core
 		public int BitsPerChannel => 8;
 		public int BitsPerPixel => this.Channels * this.BitsPerChannel;
 
+		public float[] FrameSizesMb => this.Sizes.Select(s => (s.Width * s.Height * this.Channels) / (1024f * 1024f)).ToArray();
+		public float[] FrameBase64SizesMb => this.FrameSizesMb.Select(mb => mb * 4f / 3f).ToArray();
+		public float ScalingFactor { get; private set; } = 1.0f;
+
 		public bool OnHost { get; set; } = false;
 		public bool OnDevice { get; set; } = false;
 		public IntPtr Pointer { get; set; } = IntPtr.Zero;
@@ -41,14 +45,16 @@ namespace LocalImageInferencing.Core
 				if (image.Frames.Count > 1)
 				{
 					// Multi frame image
-					this.Frames = new Image<Rgba32>[image.Frames.Count];
-					this.Sizes = new SixLabors.ImageSharp.Size[image.Frames.Count];
+					var framesList = new List<Image<Rgba32>>(image.Frames.Count);
+					var sizesList = new List<SixLabors.ImageSharp.Size>(image.Frames.Count);
 					for (int i = 0; i < image.Frames.Count; i++)
 					{
 						var frame = image.Frames.CloneFrame(i);
-						this.Frames = this.Frames.Append(frame.CloneAs<Rgba32>());
-						this.Sizes = this.Sizes.Append(frame.Size);
+						framesList.Add(frame.CloneAs<Rgba32>());
+						sizesList.Add(frame.Size);
 					}
+					this.Frames = framesList;
+					this.Sizes = sizesList;
 				}
 				else
 				{
@@ -70,16 +76,17 @@ namespace LocalImageInferencing.Core
 			color ??= Color.Black;
 			this.Id = Guid.NewGuid();
 			this.FilePath = string.Empty;
-			
-			this.Frames = new Image<Rgba32>[frames];
-			this.Sizes = new SixLabors.ImageSharp.Size[frames];
+			var framesList = new List<Image<Rgba32>>(frames);
+			var sizesList = new List<SixLabors.ImageSharp.Size>(frames);
 			for (int i = 0; i < frames; i++)
 			{
 				var img = new Image<Rgba32>(size.Width, size.Height);
 				img.Mutate(x => x.BackgroundColor(color.Value));
-				this.Frames = this.Frames.Append(img);
-				this.Sizes = this.Sizes.Append(img.Size);
+				framesList.Add(img);
+				sizesList.Add(img.Size);
 			}
+			this.Frames = framesList;
+			this.Sizes = sizesList;
 		}
 
 
@@ -179,6 +186,54 @@ namespace LocalImageInferencing.Core
 
 			return base64String;
 		}
+
+
+		public async Task Downscale(float scaleFactor = 0.5f)
+		{
+			if (scaleFactor <= 0 || scaleFactor >= 1)
+			{
+				return;
+			}
+
+			// Lokale Kopien für Parallelisierung
+			var frames = this.Frames;
+			var tasks = new List<Task<(Image<Rgba32> Frame, SixLabors.ImageSharp.Size Size)>>(frames.Count());
+
+			foreach (var frame in frames)
+			{
+				tasks.Add(Task.Run(() =>
+				{
+					int newWidth = Math.Max(1, (int) (frame.Width * scaleFactor));
+					int newHeight = Math.Max(1, (int) (frame.Height * scaleFactor));
+
+					var resizedFrame = frame.Clone(ctx => ctx.Resize(newWidth, newHeight));
+					var size = resizedFrame.Size;
+
+					frame.Dispose();
+
+					return (resizedFrame, size);
+				}));
+			}
+
+			// Warten bis alle fertig sind
+			var results = await Task.WhenAll(tasks);
+
+			// Ergebnisse in neue Listen übernehmen
+			var newFrames = new List<Image<Rgba32>>(results.Length);
+			var newSizes = new List<SixLabors.ImageSharp.Size>(results.Length);
+
+			foreach (var (frame, size) in results)
+			{
+				newFrames.Add(frame);
+				newSizes.Add(size);
+			}
+
+			this.Frames = newFrames;
+			this.Sizes = newSizes;
+			this.ScalingFactor *= scaleFactor;
+		}
+
+
 
 
 

@@ -15,7 +15,7 @@ namespace LocalImageInferencing.Api
             bool swaggerEnabled = builder.Configuration.GetValue<bool>("SwaggerEnabled", true);
             int maxUploadSize = builder.Configuration.GetValue<int>("MaxUploadSizeMb", 256) * 1_000_000;
             string ollamaApiUrl = builder.Configuration.GetValue<string>("OllamaApiUrl") ?? "http://localhost:11434";
-            string ollamaDefaultModel = builder.Configuration.GetValue<string>("OllamaDefaultModel") ?? "QWEN2_5VL_7B";
+            string ollamaDefaultModel = builder.Configuration.GetValue<string>("DefaultModel") ?? "qwen2.5vl:7b";
 
 			// Add services to the container.
 			builder.Services.AddSingleton<ImageCollection>();

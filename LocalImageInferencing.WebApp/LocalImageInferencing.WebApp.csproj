@@ -6,4 +6,13 @@
     <ImplicitUsings>enable</ImplicitUsings>
   </PropertyGroup>
 
+  <ItemGroup>
+    <PackageReference Include="Radzen.Blazor" Version="7.4.1" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\LocalImageInferencing.Client\LocalImageInferencing.Client.csproj" />
+    <ProjectReference Include="..\LocalImageInferencing.Shared\LocalImageInferencing.Shared.csproj" />
+  </ItemGroup>
+
 </Project>

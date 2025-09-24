@@ -18,7 +18,6 @@ namespace LocalImageInferencing.WebApp
 				throw new InvalidOperationException("ApiBaseUrl ist nicht konfiguriert. Füge sie zu appsettings.json oder Environment Variables hinzu.");
 			}
 
-			var ollamaUrl = builder.Configuration["OllamaUrl"] ?? "http://localhost:11434/";
 			var defaultModel = builder.Configuration["DefaultModel"] ?? string.Empty;
 			var defaultDark = builder.Configuration.GetValue<bool?>("DefaultDarkMode") ?? false;
 

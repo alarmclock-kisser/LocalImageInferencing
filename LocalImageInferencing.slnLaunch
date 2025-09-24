@@ -8,5 +8,20 @@
         "DebugTarget": "https"
       }
     ]
+  },
+  {
+    "Name": "Full (https)",
+    "Projects": [
+      {
+        "Path": "LocalImageInferencing.Api\\LocalImageInferencing.Api.csproj",
+        "Action": "Start",
+        "DebugTarget": "https"
+      },
+      {
+        "Path": "LocalImageInferencing.WebApp\\LocalImageInferencing.WebApp.csproj",
+        "Action": "Start",
+        "DebugTarget": "https"
+      }
+    ]
   }
 ]

@@ -15,7 +15,7 @@ namespace LocalImageInferencing.Api.Controllers
 		private readonly ImageCollection imageCollection;
 
 		public Uri OllamaBaseUrl => this.ollamaClient.Uri;
-		public string DefaultModelName { get; private set; } = "QWEN2_5VL_7B";
+		public string DefaultModelName { get; private set; } = "qwen2.5vl:7b";
 
 		public Model? CurrentModel { get; private set; } = null;
 
@@ -30,12 +30,16 @@ namespace LocalImageInferencing.Api.Controllers
 			// Set default model on startup
 			var models = this.ollamaClient.ListLocalModelsAsync().GetAwaiter().GetResult();
 			this.CurrentModel = models?.FirstOrDefault(m => m.Name.Equals(this.DefaultModelName, StringComparison.OrdinalIgnoreCase));
-			if (this.CurrentModel == null && models != null && models.Any())
+			if (this.CurrentModel != null)
 			{
-				this.CurrentModel = models.First();
+				this.ollamaClient.SelectedModel = this.CurrentModel.Name;
+				Console.WriteLine($"Default model set to: {this.CurrentModel.Name}");
 			}
-
-			Console.WriteLine($"Ollama API Base URL: {this.OllamaBaseUrl}");
+			else
+			{
+				Console.WriteLine($"Default model '{this.DefaultModelName}' not found in Ollama models.");
+				this.CurrentModel = models?.FirstOrDefault(m => m.Name.Equals(this.ollamaClient.SelectedModel, StringComparison.OrdinalIgnoreCase));
+			}
 		}
 
 
@@ -137,6 +141,7 @@ namespace LocalImageInferencing.Api.Controllers
 					});
 				}
 
+				this.ollamaClient.SelectedModel = model.Name;
 				this.CurrentModel = model;
 				return this.Ok($"Model set to '{model.Name}'.");
 			}
