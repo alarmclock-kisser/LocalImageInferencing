@@ -1,0 +1,69 @@
+﻿@page "/_Host"
+@using LocalImageInferencing.WebApp.Components
+@using LocalImageInferencing.WebApp
+@using LocalImageInferencing.Client
+@using LocalImageInferencing.Shared
+@using Microsoft.AspNetCore.Components.Forms
+@using Microsoft.AspNetCore.Components.Web
+@using Microsoft.AspNetCore.Mvc.TagHelpers
+@using Microsoft.JSInterop
+@using Radzen
+@using Radzen.Blazor
+@namespace LocalImageInferencing.WebApp.Pages
+@addTagHelper *, Microsoft.AspNetCore.Mvc.TagHelpers
+@{
+    Layout = null;
+}
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>LocalImageInferencing WebApp</title>
+    <base href="~/" />
+    <link href="app.css" rel="stylesheet" />
+    <link href="site.css" rel="stylesheet" />
+    <link href="_content/Radzen.Blazor/css/default-base.css" rel="stylesheet" />
+    <link id="rz-theme" href="_content/Radzen.Blazor/css/default.css" rel="stylesheet" />
+    <link rel="icon" type="image/x-icon" href="favicon.ico" />
+</head>
+<body>
+<app>
+    <component type="typeof(App)" render-mode="ServerPrerendered" />
+    </app>
+<script src="_framework/blazor.server.js"></script>
+<script src="_content/Radzen.Blazor/Radzen.Blazor.js"></script>
+<script>
+        function downloadFileFromUrl(url, fileName) {
+            const anchorElement = document.createElement('a');
+            anchorElement.href = url;
+            anchorElement.download = fileName || '';
+            document.body.appendChild(anchorElement);
+            anchorElement.click();
+            document.body.removeChild(anchorElement);
+        }
+    </script>
+    <script>
+        window.scrollToBottom = function (elementOrId) {
+            let element = elementOrId;
+            if (typeof elementOrId === "string") {
+                element = document.getElementById(elementOrId);
+            }
+            if (element) {
+                element.scrollTop = element.scrollHeight;
+                const lastEntry = element.lastElementChild;
+                if (lastEntry) {
+                    lastEntry.scrollIntoView({ behavior: "smooth" });
+                }
+            }
+        };
+        window.setRadzenTheme = function(theme){
+            const link = document.getElementById('rz-theme');
+            if(!link) return;
+            const name = theme === 'dark' ? 'dark' : 'default';
+            link.href = `_content/Radzen.Blazor/css/${name}.css`;
+        };
+    </script>
+</body>
+</html>

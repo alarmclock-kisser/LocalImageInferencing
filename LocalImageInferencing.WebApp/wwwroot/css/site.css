@@ -1,0 +1,8 @@
+/* zusätzliche Seitenspezifische Styles */
+:root{ color-scheme: light dark; }
+
+body.theme-dark { background:#0f0f10; color:#e9e9ea; }
+body.theme-light { background:#ffffff; color:#111; }
+
+/* Bildcontainer Rahmenfarbe angleichen */
+#imageContainer { border:1px solid #3b3b3b; }

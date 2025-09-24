@@ -1,0 +1,190 @@
+﻿@using Radzen
+@using Radzen.Blazor
+@using System.Collections.Concurrent
+@using System.Diagnostics
+@inject IJSRuntime JSRuntime
+@inherits LayoutComponentBase
+
+<CascadingValue Value="@AddLogEntryMethod">
+    <RadzenLayout>
+        <!-- Kopfbereich -->
+        <HeadContent>
+            <link rel="stylesheet" href="~/site.css" />
+            <link rel="icon" href="~/../LocalImageInferencing.favicon.ico" type="image/x-icon" />
+        </HeadContent>
+
+        <!-- Header -->
+        <RadzenHeader>
+            <RadzenRow AlignItems="AlignItems.Center">
+                <RadzenColumn><div style="font-size: 24px; font-weight: bold;">LocalImageInferencing WebApp</div></RadzenColumn>
+            </RadzenRow>
+        </RadzenHeader>
+
+        <!-- Sidebar -->
+
+        <!-- Hauptinhalt -->
+        <RadzenBody>
+            <RadzenContent Container="main">
+                @Body
+            </RadzenContent>
+        </RadzenBody>
+
+        <!-- Collapsible Log Footer -->
+        <RadzenFooter Style="position: sticky; bottom:0; padding:0; background-color:#f8f9fa; z-index:100;">
+            <div style="display:flex; flex-direction:column; width:100%;">
+                <!-- Toggle Bar -->
+                <div style="display:flex; align-items:center; justify-content:space-between; background:#e0e0e0; padding:2px 6px; cursor:pointer; user-select:none;"
+                     @onclick="ToggleLogExpanded">
+                    <div style="font-weight:bold; font-size:12px;">Log (@logEntries.Count)</div>
+                    <RadzenButton Size="ButtonSize.Small" ButtonStyle="ButtonStyle.Light" Text="@(logExpanded ? "-" : "+")" Click="ToggleLogExpanded" Style="min-width:30px;" />
+                </div>
+
+                @if (logExpanded)
+                {
+                    <div style="display:flex; flex-direction:column; height:25vh; padding:6px 8px; gap:4px;">
+                        <RadzenStack Orientation="Orientation.Vertical" Style="flex-grow:1; overflow:hidden;">
+                            <RadzenText Text="Log:" TextStyle="TextStyle.Subtitle2" />
+                            <div id="logContainer" @ref="logContainer" style="overflow-y:auto; border:1px solid #ccc; padding:6px; flex-grow:1; max-height:100%; word-break:break-word; background:#fff;">
+                                @foreach (var entry in logEntries.OrderBy(kv => kv.Key).TakeLast(maxLogEntries))
+                                {
+                                    <div style="white-space:pre-wrap; word-wrap:break-word; padding:2px 0; border-bottom:1px solid #eee; font-size:12px;">@entry.Value</div>
+                                }
+                            </div>
+                        </RadzenStack>
+                        <RadzenButton Text="Clear" Click="() => logEntries.Clear()" ButtonStyle="ButtonStyle.Light" Size="ButtonSize.Small" Style="align-self:flex-end;" />
+                    </div>
+                }
+            </div>
+        </RadzenFooter>
+    </RadzenLayout>
+</CascadingValue>
+
+@code {
+
+    public Func<string, bool, Task> AddLogEntryMethod => AddLogEntry;
+    public string LogPrefix { get; set; } = "[GLOBAL] ";
+    public bool logMinimal { get; set; } = true;
+    public bool logElapsed { get; set; } = false;
+
+    bool sidebarExpanded = false;
+    bool darkModeEnabled = false;
+    private bool logExpanded = false; // default collapsed
+    private ConcurrentDictionary<long, string> logEntries = [];
+    private ElementReference logContainer;
+    private int maxLogEntries = 100;
+    public bool experimentalAllowEntryUpdates { get; set; } = false;
+
+
+
+    public async Task<int> AddLogEntry(string message = "", bool overwriteLastEntry = false)
+    {
+        if (!string.IsNullOrWhiteSpace(message) && !".!?".Contains(message.Trim().Last()))
+        {
+            message += ".";
+        }
+
+        Stopwatch stopwatch = Stopwatch.StartNew();
+
+        message = "[" + DateTime.Now.ToString("HH:mm:ss.fff") + "] " + message;
+
+        try
+        {
+            if (overwriteLastEntry && logEntries.Any() && experimentalAllowEntryUpdates)
+            {
+                logEntries[logEntries.Keys.Last()] = message;
+            }
+            else
+            {
+                logEntries.TryAdd(DateTime.Now.Ticks, message);
+                if (logEntries.Count > maxLogEntries)
+                {
+                    logEntries.TryRemove(logEntries.Keys.First(), out _);
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Log error: {ex.Message}");
+        }
+        finally
+        {
+            stopwatch.Stop();
+
+            if (logElapsed)
+            {
+                message += $" (Elapsed: {stopwatch.ElapsedMilliseconds} ms)";
+            }
+
+            if (overwriteLastEntry && experimentalAllowEntryUpdates)
+            {
+                // If overwritten & allowed, add elapsed ms to the last entry
+                if (logEntries.Any())
+                {
+                    var lastKey = logEntries.Keys.Last();
+                    if (logEntries.TryGetValue(lastKey, out var lastEntry))
+                    {
+                        logEntries[lastKey] = $"{lastEntry} (Elapsed: {stopwatch.ElapsedMilliseconds} ms)";
+                    }
+                }
+            }
+
+            await InvokeAsync(StateHasChanged);
+        }
+
+        return (int)stopwatch.ElapsedMilliseconds;
+    }
+
+    async Task ToggleDarkMode(bool log = true)
+    {
+        try
+        {
+            await JSRuntime.InvokeVoidAsync(
+                "document.body.classList.toggle",
+                "dark-mode",
+                darkModeEnabled
+            );
+        }
+        catch (Exception ex)
+        {
+            await AddLogEntry($"Error toggling dark mode: {ex.Message}", true);
+        }
+        finally
+        {
+            if (log || logMinimal)
+            {
+                await AddLogEntry($"Dark mode {(darkModeEnabled ? "enabled" : "disabled")}.");
+            }
+        }
+    }
+
+    async Task SidebarToggleClick(bool log = false)
+    {
+        sidebarExpanded = !sidebarExpanded;
+
+        if (log || logMinimal)
+        {
+            await AddLogEntry($"Sidebar {(sidebarExpanded ? "expanded" : "collapsed")}").ConfigureAwait(false);
+        }
+        
+        StateHasChanged();
+    }
+
+    private void ToggleLogExpanded()
+    {
+        logExpanded = !logExpanded;
+        StateHasChanged();
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (logExpanded && logEntries.Any())
+        {
+            await JSRuntime.InvokeVoidAsync("scrollToBottom", "logContainer");
+        }
+
+        if (firstRender && logMinimal)
+        {
+            await AddLogEntry("Initial rendering completed!", true).ConfigureAwait(false);
+        }
+    }
+}

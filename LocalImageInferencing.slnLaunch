@@ -1,0 +1,12 @@
+[
+  {
+    "Name": "API (https)",
+    "Projects": [
+      {
+        "Path": "LocalImageInferencing.Api\\LocalImageInferencing.Api.csproj",
+        "Action": "Start",
+        "DebugTarget": "https"
+      }
+    ]
+  }
+]

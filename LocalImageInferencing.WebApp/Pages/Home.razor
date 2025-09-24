@@ -1,0 +1,570 @@
+﻿@page "/"
+@page "/home"
+
+@using LocalImageInferencing.Shared
+@using LocalImageInferencing.Shared.JsonResponses
+@using Microsoft.AspNetCore.Components.Web
+@using LocalImageInferencing.Client
+@using Microsoft.AspNetCore.Components.Forms
+@using Microsoft.AspNetCore.Components
+@using Microsoft.JSInterop
+@using System.Diagnostics
+@using Radzen
+@using Radzen.Blazor
+@inject ApiClient ApiClient
+@inject IJSRuntime JSRuntime
+@inject LocalImageInferencing.WebApp.WebAppConfig AppCfg
+
+<!-- Top Headline + Darkmode -->
+<RadzenCard Style="margin-bottom:1rem;">
+    <RadzenStack Orientation="Orientation.Horizontal" Gap="1rem" Style="align-items:center; justify-content:space-between;">
+        <span style="font-family: 'Arial Black'; font-size:1.6rem;">LocalImageInferencing API + WebApp</span>
+        <div style="display:flex; align-items:center; gap:.5rem;">
+            <span title="Dunkel">🌙</span>
+            <RadzenSwitch @bind-Value="IsDarkMode" Change="@(async (bool v)=> await OnDarkModeChanged(v))" />
+            <span title="Hell">☀️</span>
+        </div>
+    </RadzenStack>
+</RadzenCard>
+
+<!-- Main Image/Frame Panel + Controls -->
+<RadzenCard Style="margin-bottom:1rem;">
+    <RadzenStack Orientation="Orientation.Horizontal" Gap="1.5rem" Style="align-items:flex-start;">
+        <!-- Frame Viewing Panel -->
+        <div style="flex:1; min-width:320px;">
+            <div id="imageContainer" @oncontextmenu="OnImageContextMenu" style="position:relative; width:100%; height:@ImageHeightPx; background:#222; display:flex; align-items:center; justify-content:center; border:1px solid #444; border-radius:4px; overflow:hidden;">
+                @if (!string.IsNullOrEmpty(CurrentImageBase64))
+                {
+                    <img src="@CurrentImageBase64" style="max-width:100%; max-height:100%; object-fit:contain;" />
+                }
+                else
+                {
+                    <span style="color:#888;">Kein Bild ausgewählt</span>
+                }
+                <div id="resizeHandle" title="Größe ändern" style="position:absolute; right:4px; bottom:4px; width:16px; height:16px; background:#555; border:1px solid #999; cursor:nwse-resize; border-radius:3px; display:flex; align-items:center; justify-content:center; font-size:9px; color:#ccc; user-select:none;">↔</div>
+            </div>
+            <RadzenStack Orientation="Orientation.Horizontal" Gap="0.75rem" Style="margin-top:8px; flex-wrap:wrap; align-items:center;">
+                <InputFile OnChange="OnFileChanged" accept="image/*" />
+                <RadzenButton Text="Download" Icon="download" Disabled="@(SelectedImageId == Guid.Empty)" Click="OnDownloadClick" />
+                <RadzenDropDown TValue="string" Data="@DownloadFormats" @bind-Value="SelectedFormat" Style="width:120px;" />
+                <RadzenButton Text="Entfernen" ButtonStyle="ButtonStyle.Danger" Icon="delete" Disabled="@(SelectedImageId == Guid.Empty)" Click="OnRemoveClick" />
+                <RadzenButton Text="Clear All" ButtonStyle="ButtonStyle.Danger" Icon="delete_sweep" Click="OnClearAllClick" />
+                <RadzenButton Text="Base64 anzeigen" Icon="code" Disabled="@(SelectedImageId == Guid.Empty)" Click="OnShowBase64" />
+            </RadzenStack>
+            <RadzenStack Orientation="Orientation.Horizontal" Gap="0.75rem" Style="margin-top:8px; align-items:center;">
+                <RadzenNumeric @bind-Value="CurrentFrame" Min="0" Max="@(CurrentImageInfo?.FramesCount > 0 ? CurrentImageInfo.FramesCount - 1 : 0)" Style="width:120px;" Change="@(async (int v) => await OnFrameChanged(v))" Placeholder="Frame" />
+                <RadzenCheckBox TriState="false" @bind-Value="UseAllFrames" Change="@(async (bool v)=> await OnUseAllFramesChanged(v))" />
+                <RadzenLabel Text="Alle Frames" Style="font-size:12px;" />
+            </RadzenStack>
+        </div>
+        <!-- Image/Frame Meta Info Panel -->
+        <div style="width:340px; min-width:220px;">
+            <RadzenPanel AllowCollapse="true" Text="Bild/Frame Informationen" Collapsed="true">
+                <ChildContent>
+                    <RadzenStack Orientation="Orientation.Vertical" Gap="4px">
+                        <RadzenLabel Text="Datei:" />
+                        <RadzenLabel Text="@(CurrentImageInfo?.FilePath ?? "-")" Style="font-weight:bold" />
+                        <RadzenLabel Text="GUID:" />
+                        <RadzenLabel Text="@(CurrentImageInfo?.Id.ToString() ?? "-")" />
+                        <RadzenLabel Text="Auflösung:" />
+                        <RadzenLabel Text="@ImageResolutionText" />
+                        <RadzenLabel Text="Datenmenge (aktuelles Frame):" />
+                        <RadzenLabel Text="@ImageDataSizeKBText" />
+                        <RadzenLabel Text="Anzahl Frames:" />
+                        <RadzenLabel Text="@(CurrentImageInfo == null || CurrentImageInfo.Id == Guid.Empty ? "-" : CurrentImageInfo.FramesCount.ToString())" />
+                    </RadzenStack>
+                </ChildContent>
+            </RadzenPanel>
+        </div>
+    </RadzenStack>
+</RadzenCard>
+
+<!-- Images List -->
+<RadzenCard Style="margin-bottom:1rem;">
+    <RadzenStack Orientation="Orientation.Vertical" Gap="8px">
+        <RadzenLabel Text="Images List" Style="font-weight:bold; font-size:1.1rem;" />
+        <RadzenListBox TValue="Guid" Data="@ImageListEntries" Value="@SelectedImageId" ValueChanged="@OnListSelectionChanged" TextProperty="DisplayText" ValueProperty="Id" Style="width:100%; height:180px;" />
+    </RadzenStack>
+</RadzenCard>
+
+<!-- Prompt/LLM/Options Row -->
+<RadzenStack Orientation="Orientation.Horizontal" Gap="1.5rem" Style="margin-bottom:1rem; align-items:flex-start;">
+    <RadzenCard Style="flex:2;">
+        <RadzenStack Orientation="Orientation.Vertical" Gap="8px">
+            <RadzenStack Orientation="Orientation.Horizontal" Gap="0.75rem" Style="align-items:center; flex-wrap:wrap;">
+                <RadzenCheckBox @bind-Value="UseThinking" />
+                <RadzenLabel Text="Denken (DeepThinking)" />
+                <RadzenCheckBox @bind-Value="UseAllFrames" />
+                <RadzenLabel Text="Alle Frames" />
+            </RadzenStack>
+            <RadzenTextBox @bind-Value="PromptText" Placeholder="Prompt/Frage..." Style="width:100%;" />
+            <RadzenStack Orientation="Orientation.Horizontal" Gap="0.75rem" Style="align-items:center; flex-wrap:wrap;">
+                <RadzenButton Text="Fragen (Text)" Icon="send" ButtonStyle="ButtonStyle.Primary" Click="OnPromptSend" />
+                <RadzenButton Text="Fragen (Image)" Icon="image" ButtonStyle="ButtonStyle.Light" Click="OnPromptSend" />
+                <RadzenButton Text="→ JSON aus Bild(en)" Icon="code" ButtonStyle="ButtonStyle.Light" Click="OnPromptFieldsToJson" />
+                <RadzenLabel Style="font-size:12px; opacity:.85; margin-left:1rem;">
+                    Response-Zeit: @LastResponseText
+                </RadzenLabel>
+            </RadzenStack>
+            <RadzenTextArea @bind-Value="LlmResponse" ReadOnly="true" Style="width:100%; min-height:180px; font-family:monospace; resize:vertical;" />
+        </RadzenStack>
+    </RadzenCard>
+</RadzenStack>
+
+<style>
+.options-grid { display:grid; grid-template-columns: 220px 1fr; gap:6px 12px; align-items:center; }
+</style>
+
+@code {
+    private List<ImageObjInfo> ImageList = new();
+    private List<ImageListEntry> ImageListEntries = new();
+    private Guid SelectedImageId = Guid.Empty;
+    private ImageObjInfo? CurrentImageInfo => ImageList.FirstOrDefault(x => x.Id == SelectedImageId);
+    private int CurrentFrame = 0;
+    private string CurrentImageBase64 = string.Empty;
+    private string PromptText = string.Empty;
+    private string LlmResponse = string.Empty;
+    private string[] DownloadFormats = new[] { "png", "jpg", "bmp" };
+    private string SelectedFormat = "png";
+
+    // Einstellungen
+    private bool UseAllFrames = false;
+    private bool IsDarkMode = false;
+    private bool UseThinking = false;
+
+    // Antwortzeit
+    private double? LastResponseSeconds;
+    private string LastResponseText => LastResponseSeconds.HasValue ? $"{LastResponseSeconds.Value:F3} s" : "-";
+
+    // Abgeleitete Infos
+    private string ImageResolutionText => CurrentImageInfo == null || CurrentImageInfo.Id == Guid.Empty ? "-" : _currentWidth > 0 ? $"{_currentWidth} x {_currentHeight}px" : "?";
+    private string ImageDataSizeKBText => _lastFrameBytes > 0 ? $"{(_lastFrameBytes / 1024.0):F1} kB" : "-";
+
+    // Tracking aktuelles Frame
+    private int _currentWidth = 0;
+    private int _currentHeight = 0;
+    private int _lastFrameBytes = 0;
+
+    // Resizing state
+    private int ImageWidth = 900;
+    private int ImageHeight = (int)(900 * 9.0 / 16.0);
+    private string ImageWidthPx => ImageWidth + "px";
+    private string ImageHeightPx => ImageHeight + "px";
+    private bool _resizeJsInitialized = false;
+
+    private class ImageListEntry
+    {
+        public Guid Id { get; set; }
+        public string DisplayText { get; set; } = string.Empty;
+    }
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadImageList();
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            try
+            {
+                var theme = await JSRuntime.InvokeAsync<string?>("localStorage.getItem", "theme");
+                if (string.IsNullOrWhiteSpace(theme))
+                {
+                    IsDarkMode = AppCfg.DefaultDarkMode;
+                }
+                else
+                {
+                    IsDarkMode = string.Equals(theme, "dark", StringComparison.OrdinalIgnoreCase);
+                }
+                await ApplyTheme();
+            }
+            catch
+            {
+
+            }
+        }
+
+        if (firstRender && !_resizeJsInitialized)
+        {
+            await JSRuntime.InvokeVoidAsync("initImageResizer", "imageContainer", "resizeHandle");
+            _resizeJsInitialized = true;
+        }
+    }
+
+    private void BuildImageListEntries()
+    {
+        ImageListEntries = ImageList.Select(i => new ImageListEntry
+        {
+            Id = i.Id,
+            DisplayText = $"{(string.IsNullOrWhiteSpace(i.FilePath) ? "[Unbenannt]" : i.FilePath)} ({i.Id.ToString()[..8]})"
+        }).ToList();
+    }
+
+    private async Task LoadImageList()
+    {
+        ImageList = (await ApiClient.GetImageListAsync()).ToList();
+        BuildImageListEntries();
+        if (ImageList.Count == 0)
+        {
+            SelectedImageId = Guid.Empty;
+            CurrentImageBase64 = string.Empty;
+            ResetFrameMeta();
+            StateHasChanged();
+            return;
+        }
+        if (!ImageList.Any(i => i.Id == SelectedImageId))
+        {
+            SelectedImageId = ImageList[0].Id;
+        }
+        CurrentFrame = 0;
+        await LoadCurrentImage();
+    }
+
+
+    private void ResetFrameMeta()
+    {
+        _currentWidth = 0;
+        _currentHeight = 0;
+        _lastFrameBytes = 0;
+    }
+
+    private async Task LoadCurrentImage()
+    {
+        if (SelectedImageId == Guid.Empty)
+        {
+            CurrentImageBase64 = string.Empty;
+            ResetFrameMeta();
+            StateHasChanged();
+            return;
+        }
+        var data = await ApiClient.GetImageData(SelectedImageId, CurrentFrame);
+        if (!string.IsNullOrEmpty(data?.Base64Data))
+        {
+            CurrentImageBase64 = $"data:image/png;base64,{data.Base64Data}";
+            _currentWidth = data.Width;
+            _currentHeight = data.Height;
+            _lastFrameBytes = (data.Base64Data.Length * 3) / 4;
+        }
+        else
+        {
+            CurrentImageBase64 = string.Empty;
+            ResetFrameMeta();
+        }
+        StateHasChanged();
+    }
+
+    private async Task OnListSelectionChanged(Guid value)
+    {
+        if (value == Guid.Empty) return;
+        SelectedImageId = value;
+        CurrentFrame = 0;
+        await LoadCurrentImage();
+        StateHasChanged();
+    }
+
+    private async Task OnFrameChanged(int value)
+    {
+        CurrentFrame = value;
+        await LoadCurrentImage();
+    }
+
+    private async Task OnFileChanged(InputFileChangeEventArgs args)
+    {
+        IBrowserFile? file = null;
+        try
+        {
+            if (args?.FileCount > 0)
+            {
+                var files = args.GetMultipleFiles(1);
+                if (files != null && files.Count > 0)
+                {
+                    file = files[0];
+                }
+            }
+        }
+        catch
+        {
+            var files = args?.GetMultipleFiles();
+            if (files != null && files.Count > 0)
+            {
+                file = files[0];
+            }
+        }
+
+        if (file == null) return;
+        var info = await ApiClient.UploadImageAsync(file);
+        if (info != null && info.Id != Guid.Empty)
+        {
+            SelectedImageId = info.Id;
+            // Sofort anzeigen
+            var existing = ImageList.FirstOrDefault(x => x.Id == info.Id);
+            if (existing == null)
+            {
+                ImageList.Insert(0, info);
+            }
+            else
+            {
+                existing.FilePath = info.FilePath;
+            }
+            BuildImageListEntries();
+            await LoadCurrentImage();
+            // Liste sicherheitshalber neu laden
+            await LoadImageList();
+        }
+        else
+        {
+            await LoadImageList();
+        }
+    }
+
+    private async Task OnRemoveClick()
+    {
+        if (SelectedImageId == Guid.Empty) return;
+        await ApiClient.RemoveImageAsync(SelectedImageId);
+        await LoadImageList();
+    }
+
+    private async Task OnDownloadClick()
+    {
+        if (SelectedImageId == Guid.Empty) return;
+        var url = $"{ApiClient.BaseUrl}api/image/download?id={SelectedImageId}&frameId={CurrentFrame}&format={SelectedFormat}";
+        await JSRuntime.InvokeVoidAsync("downloadImageFrame", url);
+    }
+
+    private void OnImageContextMenu(MouseEventArgs e)
+    {
+        // Browser-Kontextmenü zulassen
+    }
+
+    public async Task OnShowBase64()
+    {
+        if (SelectedImageId == Guid.Empty)
+        {
+            LlmResponse = "Kein Bild ausgewählt.";
+            return;
+        }
+        var data = await ApiClient.GetImageData(SelectedImageId, CurrentFrame);
+        if (data != null && !string.IsNullOrEmpty(data.Base64Data))
+        {
+            LlmResponse = data.Base64Data;
+        }
+        else
+        {
+            LlmResponse = "Konnte Bilddaten nicht laden.";
+        }
+    }
+
+    private async Task OnPromptSend()
+    {
+        LlmResponse = "Warte auf Antwort...";
+        StateHasChanged();
+
+        var response = await ApiClient.GetResponseFromText(PromptText, UseThinking);
+
+        LastResponseSeconds = response.ResponseDelaySeconds;
+
+        LlmResponse = response.ResponseText;
+        StateHasChanged();
+    }
+
+    private Task OnUseAllFramesChanged(bool v)
+    {
+        UseAllFrames = v;
+        return Task.CompletedTask;
+    }
+
+    private async Task OnDarkModeChanged(bool v)
+    {
+        IsDarkMode = v;
+        await JSRuntime.InvokeVoidAsync("localStorage.setItem", "theme", v ? "dark" : "light");
+        await ApplyTheme();
+    }
+
+    private async Task ApplyTheme()
+    {
+        await JSRuntime.InvokeVoidAsync("setBodyTheme", IsDarkMode ? "theme-dark" : "theme-light");
+        await JSRuntime.InvokeVoidAsync("setRadzenTheme", IsDarkMode ? "dark" : "default");
+    }
+
+    private async Task OnPromptFieldsToJson()
+    {
+        if (SelectedImageId == Guid.Empty)
+        {
+            LlmResponse = "Kein Bild ausgewählt.";
+            return;
+        }
+
+        LlmResponse = "Warte auf Antwort...";
+        StateHasChanged();
+
+
+
+        int? frameId = UseAllFrames ? null : CurrentFrame;
+
+        string prompt = "Du bist ein Nutzereingaben-Textfeld-Erkennungs-Experte in Scandaten (Bild/Bilder). " +
+                        "Gib pixelgenaue Koordinaten als JSON-String mit kurzer Beschreibung (camelCase) & Confidence (0.0–1.0) aus, " +
+                        "wo geschwärzt werden müsste, um ein Blanko-Formular zu erhalten.";
+        string schema = "Antwort-JSON soll in DTOs eingelesen werden: 'ImageResponseRectList' mit Guid imageId, int frameId und 'IEnumerable<ImageResponseRect> rectangles' " +
+                        "(int x, int y, int width, int height, float confidence, string label).";
+
+        var response = await ApiClient.GetResponseFromImage(prompt, SelectedImageId, frameId, "png", schema);
+
+        LastResponseSeconds = response.ResponseDelaySeconds;
+
+        LlmResponse = CleanModelJson(response.ResponseText);
+
+        var parsed = await TryParseResponseJson();
+        if (parsed != null)
+        {
+            LlmResponse += "\n\n—\n\nErkannte Felder:\n";
+            foreach (var r in parsed.Rectangles)
+            {
+                LlmResponse += $"- [{r.Confidence:P1}] {r.Label} @ ({r.X},{r.Y}) {r.Width}x{r.Height}\n";
+            }
+        }
+        else
+        {
+            LlmResponse += "\n\n—\n\nKonnte JSON nicht parsen.";
+        }
+        StateHasChanged();
+    }
+
+    private string CleanModelJson(string? input)
+    {
+        if (string.IsNullOrWhiteSpace(input))
+            return string.Empty;
+
+        // Entferne führende/trailing Backticks und Leerzeichen
+        var cleaned = input.Trim().Trim('`').Trim();
+
+        // Optional: Versuche, nur den JSON-Teil zu extrahieren, falls der Text davor/nachher enthält
+        int start = cleaned.IndexOf('{');
+        int end = cleaned.LastIndexOf('}');
+        if (start >= 0 && end > start)
+        {
+            cleaned = cleaned.Substring(start, end - start + 1);
+        }
+
+        return cleaned;
+    }
+
+    // Ergänzung: Methode zum Parsen des JSON-Antwort-Strings
+    private async Task<ImageResponseRectList?> TryParseResponseJson()
+    {
+        if (string.IsNullOrWhiteSpace(LlmResponse))
+            return null;
+
+        try
+        {
+            // Versuche, den JSON-Teil aus der Antwort zu extrahieren
+            var cleanedJson = CleanModelJson(LlmResponse);
+
+            // Deserialisiere in das erwartete DTO
+            var result = System.Text.Json.JsonSerializer.Deserialize<ImageResponseRectList>(cleanedJson);
+            return result;
+        }
+        catch
+        {
+            return null;
+        }
+        finally
+        {
+            await InvokeAsync(StateHasChanged);
+        }
+    }
+
+    // Beispiel-DTOs für die erwartete Antwortstruktur
+    public class ImageResponseRectList
+    {
+        public Guid ImageId { get; set; }
+        public int FrameId { get; set; }
+        public IEnumerable<ImageResponseRect> Rectangles { get; set; } = new List<ImageResponseRect>();
+    }
+
+    public class ImageResponseRect
+    {
+        public int X { get; set; }
+        public int Y { get; set; }
+        public int Width { get; set; }
+        public int Height { get; set; }
+        public float Confidence { get; set; }
+        public string Label { get; set; } = string.Empty;
+    }
+    private async Task OnClearAllClick(MouseEventArgs args)
+    {
+        await ApiClient.ClearImagesAsync();
+        await LoadImageList();
+        StateHasChanged();
+    }
+}
+
+<script>
+    window.initImageResizer = (containerId, handleId) => {
+        const el = document.getElementById(containerId);
+        const handle = document.getElementById(handleId);
+        if (!el || !handle) return;
+        let startX = 0, startY = 0, startW = 0, startH = 0, resizing = false;
+        const minW = 200, minH = 150;
+        handle.addEventListener('mousedown', e => {
+            e.preventDefault();
+            startX = e.clientX;
+            startY = e.clientY;
+            const rect = el.getBoundingClientRect();
+            startW = rect.width;
+            startH = rect.height;
+            resizing = true;
+            document.body.style.userSelect = 'none';
+        });
+        window.addEventListener('mousemove', e => {
+            if (!resizing) return;
+            const dx = e.clientX - startX;
+            const dy = e.clientY - startY;
+            let newW = startW + dx;
+            let newH = startH + dy;
+            if (newW < minW) newW = minW;
+            if (newH < minH) newH = minH;
+            el.style.width = newW + 'px';
+            el.style.height = newH + 'px';
+        });
+        window.addEventListener('mouseup', () => {
+            if (resizing) {
+                resizing = false;
+                document.body.style.userSelect = '';
+            }
+        });
+    };
+    window.downloadImageFrame = async (url) => {
+        try {
+            const resp = await fetch(url);
+            if (!resp.ok) {
+                console.error('Download fehlgeschlagen', resp.status, resp.statusText);
+                return;
+            }
+            const disposition = resp.headers.get('content-disposition');
+            let fileName = 'image';
+            if (disposition && disposition.indexOf('filename=') !== -1) {
+                const match = /filename="?([^";]+)"?/i.exec(disposition);
+                if (match && match[1]) {
+                    fileName = match[1];
+                }
+            }
+            const blob = await resp.blob();
+            const blobUrl = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = blobUrl;
+            a.download = fileName;
+            document.body.appendChild(a);
+            a.click();
+            a.remove();
+            setTimeout(() => URL.revokeObjectURL(blobUrl), 2000);
+        } catch (e) {
+            console.error('Download-Exception', e);
+        }
+    };
+    window.setBodyTheme = (cls) => {
+        document.body.classList.remove('theme-light','theme-dark');
+        document.body.classList.add(cls);
+    }
+</script>
