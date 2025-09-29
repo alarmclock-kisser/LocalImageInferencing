@@ -21,6 +21,10 @@ namespace LocalImageInferencing.Api
 			builder.Services.AddSingleton<ImageCollection>();
             builder.Services.AddSingleton(new OllamaApiConfig(ollamaApiUrl, ollamaDefaultModel));
 
+            // Set global HttpClient timeout to 10 minutes for long LLM/image requests
+            builder.Services.AddHttpClient("Default")
+                .ConfigureHttpClient(c => c.Timeout = TimeSpan.FromMinutes(10));
+
             // Swagger/OpenAPI (always register generator, conditionally expose UI later)
             builder.Services.AddEndpointsApiExplorer();
             builder.Services.AddSwaggerGen(c =>

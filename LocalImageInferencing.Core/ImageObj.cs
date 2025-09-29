@@ -89,6 +89,20 @@ namespace LocalImageInferencing.Core
 			this.Sizes = sizesList;
 		}
 
+		internal ImageObj(IEnumerable<Image<Rgba32>> frames)
+		{
+			this.Id = Guid.NewGuid();
+			this.FilePath = string.Empty;
+			var framesList = new List<Image<Rgba32>>(frames);
+			var sizesList = new List<SixLabors.ImageSharp.Size>(framesList.Count);
+			foreach (var img in framesList)
+			{
+				sizesList.Add(img.Size);
+			}
+			this.Frames = framesList;
+			this.Sizes = sizesList;
+		}
+
 
 
 		public byte[] GetPixels(int frameId = 0)

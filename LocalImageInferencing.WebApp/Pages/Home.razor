@@ -20,9 +20,9 @@
     <RadzenStack Orientation="Orientation.Horizontal" Gap="1rem" Style="align-items:center; justify-content:space-between;">
         <span style="font-family: 'Arial Black'; font-size:1.6rem;">LocalImageInferencing API + WebApp</span>
         <div style="display:flex; align-items:center; gap:.5rem;">
-            <span title="Dunkel">🌙</span>
-            <RadzenSwitch @bind-Value="ViewModel.IsDarkMode" Change="@(async (bool v)=> await OnDarkModeChanged(v))" />
             <span title="Hell">☀️</span>
+            <RadzenSwitch @bind-Value="ViewModel.IsDarkMode" Change="@(async (bool v)=> await OnDarkModeChanged(v))" />
+            <span title="Dunkel">🌙</span>
         </div>
     </RadzenStack>
 </RadzenCard>
@@ -44,7 +44,8 @@
                 <div id="resizeHandle" title="Größe ändern" style="position:absolute; right:4px; bottom:4px; width:16px; height:16px; background:#555; border:1px solid #999; cursor:nwse-resize; border-radius:3px; display:flex; align-items:center; justify-content:center; font-size:9px; color:#ccc; user-select:none;">↔</div>
             </div>
             <RadzenStack Orientation="Orientation.Horizontal" Gap="0.75rem" Style="margin-top:8px; flex-wrap:wrap; align-items:center;">
-                <InputFile OnChange="OnFileChanged" accept="image/*" />
+                <InputFile id="hiddenUpload" OnChange="OnFileChanged" accept="image/*" style="display:none;" />
+                <RadzenButton Icon="upload" Text="Upload" ButtonStyle="ButtonStyle.Primary" Click="TriggerFileSelect" />
                 <RadzenButton Text="Download" Icon="download" Disabled="@(ViewModel.SelectedImageId == Guid.Empty)" Click="OnDownloadClick" />
                 <RadzenDropDown TValue="string" Data="@ViewModel.DownloadFormats" @bind-Value="ViewModel.SelectedFormat" Style="width:120px;" />
                 <RadzenButton Text="Entfernen" ButtonStyle="ButtonStyle.Danger" Icon="delete" Disabled="@(ViewModel.SelectedImageId == Guid.Empty)" Click="OnRemoveClick" />
@@ -95,10 +96,10 @@
                 <RadzenCheckBox @bind-Value="ViewModel.UseAllFrames" />
                 <RadzenLabel Text="Alle Frames" />
             </RadzenStack>
-            <RadzenTextBox @bind-Value="ViewModel.PromptText" Placeholder="Prompt/Frage..." Style="width:100%;" />
+            <RadzenTextBox @bind-Value="ViewModel.PromptText" Placeholder="Prompt/Frage..." Style="width:100%;" @onkeydown="OnPromptTextBoxKeyDown" />
             <RadzenStack Orientation="Orientation.Horizontal" Gap="0.75rem" Style="align-items:center; flex-wrap:wrap;">
                 <RadzenButton Text="Fragen (Text)" Icon="send" ButtonStyle="ButtonStyle.Primary" Click="OnPromptSend" />
-                <RadzenButton Text="Fragen (Image)" Icon="image" ButtonStyle="ButtonStyle.Light" Click="OnPromptSend" />
+                <RadzenButton Text="Fragen (Image)" Icon="image" ButtonStyle="ButtonStyle.Light" Click="OnPromptSendImage" />
                 <RadzenButton Text="→ JSON aus Bild(en)" Icon="code" ButtonStyle="ButtonStyle.Light" Click="OnPromptFieldsToJson" />
                 <RadzenLabel Style="font-size:12px; opacity:.85; margin-left:1rem;">
                     Response-Zeit: @ViewModel.LastResponseText
@@ -120,6 +121,8 @@
     protected override async Task OnInitializedAsync()
     {
         await LoadImageList();
+
+        await base.OnInitializedAsync();
     }
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
@@ -327,6 +330,19 @@
         StateHasChanged();
     }
 
+    private async Task OnPromptSendImage()
+    {
+        ViewModel.LlmResponse = "Warte auf Antwort...";
+        StateHasChanged();
+
+        int? frameId = ViewModel.UseAllFrames ? null : ViewModel.CurrentFrame;
+
+        var response = await ApiClient.GenerateTextFromImageAsync(ViewModel.PromptText, ViewModel.SelectedImageId, frameId);
+        ViewModel.LastResponseSeconds = response.ResponseDelaySeconds;
+        ViewModel.LlmResponse = response.ResponseText;
+        StateHasChanged();
+    }
+
     private Task OnUseAllFramesChanged(bool v)
     {
         ViewModel.UseAllFrames = v;
@@ -405,6 +421,22 @@
         await ApiClient.ClearImagesAsync();
         await LoadImageList();
         StateHasChanged();
+    }
+
+    private async Task OnPromptTextBoxKeyDown(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter")
+        {
+            if (e.ShiftKey)
+                await OnPromptSendImage();
+            else
+                await OnPromptSend();
+        }
+    }
+
+    private async Task TriggerFileSelect()
+    {
+        await JSRuntime.InvokeVoidAsync("triggerHiddenUpload", "hiddenUpload");
     }
 }
 
@@ -498,4 +530,8 @@
             console.error('downloadBlob error', e);
         }
     };
+    window.triggerHiddenUpload = (id) => {
+        const el = document.getElementById(id);
+        if (el) el.click();
+    }
 </script>

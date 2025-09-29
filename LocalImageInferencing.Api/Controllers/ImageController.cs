@@ -270,7 +270,7 @@ namespace LocalImageInferencing.Api.Controllers
 		[ProducesResponseType(typeof(ProblemDetails), 400)]
 		[ProducesResponseType(typeof(ProblemDetails), 404)]
 		[ProducesResponseType(typeof(ProblemDetails), 500)]
-		public async Task<ActionResult<FileContentResult>> ImageDownloadAsync([FromQuery] Guid id, [FromQuery] int frameId = 0, [FromQuery] string format = "png")
+		public async Task<IActionResult> ImageDownloadAsync([FromQuery] Guid id, [FromQuery] int frameId = 0, [FromQuery] string format = "png")
 		{
 			try
 			{

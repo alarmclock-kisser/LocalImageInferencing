@@ -1032,6 +1032,14 @@
           "base64Data": {
             "type": "string",
             "nullable": true
+          },
+          "frameBase64SizeMb": {
+            "type": "number",
+            "format": "float"
+          },
+          "scalingFactor": {
+            "type": "number",
+            "format": "float"
           }
         },
         "additionalProperties": false
@@ -1054,7 +1062,7 @@
           "sizes": {
             "type": "array",
             "items": {
-              "$ref": "#/components/schemas/Int32Int32ValueTuple"
+              "$ref": "#/components/schemas/SizeInfo"
             },
             "nullable": true
           },
@@ -1074,6 +1082,26 @@
             "type": "integer",
             "format": "int32"
           },
+          "frameSizesMb": {
+            "type": "array",
+            "items": {
+              "type": "number",
+              "format": "float"
+            },
+            "nullable": true
+          },
+          "frameBase64SizesMb": {
+            "type": "array",
+            "items": {
+              "type": "number",
+              "format": "float"
+            },
+            "nullable": true
+          },
+          "scalingFactor": {
+            "type": "number",
+            "format": "float"
+          },
           "onHost": {
             "type": "boolean"
           },
@@ -1085,10 +1113,6 @@
             "nullable": true
           }
         },
-        "additionalProperties": false
-      },
-      "Int32Int32ValueTuple": {
-        "type": "object",
         "additionalProperties": false
       },
       "LlmResponse": {
@@ -1182,6 +1206,20 @@
           }
         },
         "additionalProperties": { }
+      },
+      "SizeInfo": {
+        "type": "object",
+        "properties": {
+          "width": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "height": {
+            "type": "integer",
+            "format": "int32"
+          }
+        },
+        "additionalProperties": false
       }
     }
   }

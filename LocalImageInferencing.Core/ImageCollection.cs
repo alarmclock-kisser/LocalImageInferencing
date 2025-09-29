@@ -86,6 +86,8 @@ namespace LocalImageInferencing.Core
 			}
 		}
 
+		
+
 
 
 		public bool Remove(Guid id)
